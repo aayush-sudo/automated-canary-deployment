@@ -1,0 +1,30 @@
+
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  name: canary-demo-flagger
+  namespace: default
+spec:
+  provider: istio
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: canary-demo-flagger
+  progressDeadlineSeconds: 300
+  service:
+    port: 5001
+    targetPort: 5001
+  analysis:
+    interval: 2m
+    threshold: 3
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 2m
+      - name: request-duration
+        thresholdRange:
+          max: 500
+        interval: 2m

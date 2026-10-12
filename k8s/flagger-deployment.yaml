@@ -1,0 +1,29 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: canary-demo-flagger
+  namespace: default
+  labels:
+    app: canary-demo-flagger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: canary-demo-flagger
+  template:
+    metadata:
+      labels:
+        app: canary-demo-flagger
+        version: v2
+    spec:
+      containers:
+        - name: canary-demo
+          image: canary-demo:v2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5001
+          env:
+            - name: APP_VERSION
+              value: "v2"
