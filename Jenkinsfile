@@ -33,6 +33,26 @@ pipeline {
                 }
             }
         }
+
+        stage('Check Build Environment') {      git status
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+
+                    Write-Host "Agent identity:"
+                    whoami
+
+                    Write-Host "Git:"
+                    git --version
+
+                    Write-Host "Docker:"
+                    docker --version
+
+                    Write-Host "Kubernetes client:"
+                    kubectl version --client
+                '''
+            }
+}
     }
 
     post {
