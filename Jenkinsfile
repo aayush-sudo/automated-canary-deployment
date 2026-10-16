@@ -119,6 +119,63 @@ pipeline {
             }
         }
 
+        stage('Validate Canary Image') {
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    $env:KUBECONFIG = "C:\\Users\\hp\\.kube\\config"
+
+                    $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
+                    $minikube = "C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe"
+                    $requestedImage = "$env:CANARY_IMAGE"
+
+                    if ([string]::IsNullOrWhiteSpace($requestedImage)) {
+                        throw "CANARY_IMAGE must not be empty."
+                    }
+
+                    Write-Host "Requested image: $requestedImage"
+
+                    Write-Host "Reading current Flagger target image..."
+                    $currentImage = & $kubectl get deployment canary-demo-flagger `
+                        -n default `
+                        -o "jsonpath={.spec.template.spec.containers[0].image}"
+
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not read the Flagger target deployment."
+                    }
+
+                    Write-Host "Current target image: $currentImage"
+
+                    Write-Host "Checking image availability in Minikube..."
+                    $images = & $minikube -p devops-canary image ls
+
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not list images in Minikube."
+                    }
+
+                    $imageAvailable = $false
+                    foreach ($image in $images) {
+                        if ($image.Trim() -eq $requestedImage -or
+                            $image.Trim() -eq "docker.io/library/$requestedImage") {
+                            $imageAvailable = $true
+                            break
+                        }
+                    }
+
+                    if (-not $imageAvailable) {
+                        throw "Image '$requestedImage' is not available in Minikube."
+                    }
+
+                    if ($requestedImage -eq $currentImage) {
+                        Write-Host "Requested image is already deployed. No rollout is needed."
+                    } else {
+                        Write-Host "Image is available and differs from the current target."
+                        Write-Host "Ready for the controlled deployment stage."
+                    }
+                '''
+            }
+        }
+
     }
 
     post {
