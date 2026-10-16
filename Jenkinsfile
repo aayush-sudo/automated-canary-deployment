@@ -38,6 +38,7 @@ pipeline {
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
+                    $env:KUBECONFIG = "C:\Users\hp\.kube\config"
 
                     $docker = "C:\\Users\\hp\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe"
                     $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
