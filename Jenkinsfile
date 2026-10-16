@@ -33,8 +33,8 @@ pipeline {
                 }
             }
         }
-
-        stage('Check Build Environment') {      git status
+        
+        stage('Check Build Environment') {
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
@@ -52,7 +52,8 @@ pipeline {
                     kubectl version --client
                 '''
             }
-}
+        }
+
     }
 
     post {
