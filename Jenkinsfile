@@ -2,7 +2,7 @@
 pipeline {
     agent any
 
-        parameters {
+    parameters {
         string(
             name: 'CANARY_IMAGE',
             defaultValue: 'canary-demo:v2',
@@ -25,23 +25,16 @@ pipeline {
             steps {
                 echo 'Repository checkout completed.'
 
-                script {
-                    if (isUnix()) {
-                        sh 'pwd'
-                        sh 'ls -la'
-                    } else {
-                        powershell '''
-                            Write-Host "Jenkins workspace:"
-                            Get-Location
+                powershell '''
+                    Write-Host "Jenkins workspace:"
+                    Get-Location
 
-                            Write-Host "Repository files:"
-                            Get-ChildItem -Force
-                        '''
-                    }
-                }
+                    Write-Host "Repository files:"
+                    Get-ChildItem -Force
+                '''
             }
         }
-        
+
         stage('Check Build Environment') {
             steps {
                 powershell '''
@@ -61,28 +54,38 @@ pipeline {
 
                     Write-Host "`nDocker client and server:"
                     & $docker version
-
                     if ($LASTEXITCODE -ne 0) {
-                        throw "Jenkins cannot connect to the Docker engine."
+                        throw "Jenkins cannot connect to Docker."
                     }
 
                     Write-Host "`nKubernetes client:"
                     & $kubectl version --client
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "kubectl is unavailable."
+                    }
 
                     Write-Host "`nMinikube:"
                     & $minikube version
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Minikube executable is unavailable."
+                    }
 
                     Write-Host "`nHelm:"
                     & $helm version
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Helm is unavailable."
+                    }
 
                     Write-Host "`nKubernetes context:"
                     & $kubectl config current-context
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not read Kubernetes context."
+                    }
 
                     Write-Host "`nKubernetes nodes:"
                     & $kubectl get nodes
-
                     if ($LASTEXITCODE -ne 0) {
-                        throw "Jenkins cannot access the Kubernetes cluster."
+                        throw "Jenkins cannot access Kubernetes."
                     }
                 '''
             }
@@ -93,10 +96,9 @@ pipeline {
                 powershell '''
                     $ErrorActionPreference = "Stop"
                     $env:KUBECONFIG = "C:\\Users\\hp\\.kube\\config"
-
                     $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
 
-                    Write-Host "Checking existing Flagger canary..."
+                    Write-Host "Checking Flagger canary..."
                     & $kubectl get canary canary-demo-flagger -n default
                     if ($LASTEXITCODE -ne 0) {
                         throw "Required Flagger canary was not found."
@@ -126,7 +128,6 @@ pipeline {
                     $env:KUBECONFIG = "C:\\Users\\hp\\.kube\\config"
 
                     $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
-                    $minikube = "C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe"
                     $requestedImage = "$env:CANARY_IMAGE"
 
                     if ([string]::IsNullOrWhiteSpace($requestedImage)) {
@@ -140,51 +141,85 @@ pipeline {
                         -n default `
                         -o "jsonpath={.spec.template.spec.containers[0].image}"
 
-                    if ($LASTEXITCODE -ne 0) {
-                        throw "Could not read the Flagger target deployment."
+                    if ($LASTEXITCODE -ne 0 -or
+                        [string]::IsNullOrWhiteSpace(($currentImage -join ""))) {
+                        throw "Could not read the Flagger target image."
                     }
 
+                    $currentImage = ($currentImage -join "").Trim()
                     Write-Host "Current target image: $currentImage"
 
-                    Write-Host "Checking image availability in Minikube..."
-                    $images = & $minikube -p devops-canary image ls
+                    Write-Host "Validating against existing application deployments..."
 
-                    if ($LASTEXITCODE -ne 0) {
-                        throw "Could not list images in Minikube."
-                    }
+                    $knownImage = $false
 
-                    $imageAvailable = $false
-                    foreach ($image in $images) {
-                        if ($image.Trim() -eq $requestedImage -or
-                            $image.Trim() -eq "docker.io/library/$requestedImage") {
-                            $imageAvailable = $true
-                            break
+                    foreach ($deployment in @("canary-demo-v1", "canary-demo-v2")) {
+                        $image = & $kubectl get deployment $deployment `
+                            -n default `
+                            -o "jsonpath={.spec.template.spec.containers[0].image}"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not inspect deployment $deployment."
                         }
+
+                        $image = ($image -join "").Trim()
+
+                        if ($image -ne $requestedImage) {
+                            continue
+                        }
+
+                        $ready = & $kubectl get deployment $deployment `
+                            -n default `
+                            -o "jsonpath={.status.readyReplicas}"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not check readiness for $deployment."
+                        }
+
+                        $replicas = & $kubectl get deployment $deployment `
+                            -n default `
+                            -o "jsonpath={.spec.replicas}"
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not read replica count for $deployment."
+                        }
+
+                        if ([int]($ready -join "0") -lt 1 -or
+                            [int]($replicas -join "0") -lt 1) {
+                            throw "Image '$requestedImage' matches $deployment, but it has no ready replica."
+                        }
+
+                        Write-Host "Image matches deployment: $deployment"
+                        Write-Host "Ready replicas: $ready / $replicas"
+                        $knownImage = $true
+                        break
                     }
 
-                    if (-not $imageAvailable) {
-                        throw "Image '$requestedImage' is not available in Minikube."
+                    if (-not $knownImage) {
+                        throw "Image '$requestedImage' does not match a validated v1 or v2 application deployment."
                     }
 
                     if ($requestedImage -eq $currentImage) {
-                        Write-Host "Requested image is already deployed. No rollout is needed."
+                        Write-Host "Requested image already matches the Flagger target."
+                        Write-Host "No rollout is needed."
                     } else {
-                        Write-Host "Image is available and differs from the current target."
-                        Write-Host "Ready for the controlled deployment stage."
+                        Write-Host "Image matches a ready application deployment."
+                        Write-Host "Ready for a separate controlled deployment stage."
                     }
+
+                    Write-Host "Image validation passed. No resources were changed."
                 '''
             }
         }
-
     }
 
     post {
         success {
-            echo 'Initial Jenkins pipeline passed.'
+            echo 'Jenkins validation pipeline passed.'
         }
 
         failure {
-            echo 'Initial Jenkins pipeline failed. Check Console Output.'
+            echo 'Jenkins pipeline failed. Check Console Output.'
         }
     }
 }
