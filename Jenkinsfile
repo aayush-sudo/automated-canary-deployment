@@ -39,17 +39,42 @@ pipeline {
                 powershell '''
                     $ErrorActionPreference = "Stop"
 
+                    $docker = "C:\\Users\\hp\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe"
+                    $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
+                    $minikube = "C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe"
+                    $helm = "C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Links\\helm.exe"
+
                     Write-Host "Agent identity:"
                     whoami
 
-                    Write-Host "Git:"
+                    Write-Host "`nGit:"
                     git --version
 
-                    Write-Host "Docker:"
-                    docker --version
+                    Write-Host "`nDocker client and server:"
+                    & $docker version
 
-                    Write-Host "Kubernetes client:"
-                    kubectl version --client
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Jenkins cannot connect to the Docker engine."
+                    }
+
+                    Write-Host "`nKubernetes client:"
+                    & $kubectl version --client
+
+                    Write-Host "`nMinikube:"
+                    & $minikube version
+
+                    Write-Host "`nHelm:"
+                    & $helm version
+
+                    Write-Host "`nKubernetes context:"
+                    & $kubectl config current-context
+
+                    Write-Host "`nKubernetes nodes:"
+                    & $kubectl get nodes
+
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Jenkins cannot access the Kubernetes cluster."
+                    }
                 '''
             }
         }
