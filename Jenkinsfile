@@ -2,6 +2,14 @@
 pipeline {
     agent any
 
+        parameters {
+        string(
+            name: 'CANARY_IMAGE',
+            defaultValue: 'canary-demo:v2',
+            description: 'Container image to deploy through the Flagger-managed canary'
+        )
+    }
+
     options {
         timestamps()
     }
