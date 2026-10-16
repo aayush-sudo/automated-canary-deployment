@@ -80,6 +80,37 @@ pipeline {
             }
         }
 
+        stage('Deployment Preflight') {
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    $env:KUBECONFIG = "C:\\Users\\hp\\.kube\\config"
+
+                    $kubectl = "C:\\Windows\\System32\\kubectl\\kubectl.exe"
+
+                    Write-Host "Checking existing Flagger canary..."
+                    & $kubectl get canary canary-demo-flagger -n default
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Required Flagger canary was not found."
+                    }
+
+                    Write-Host "Checking Flagger controller..."
+                    & $kubectl get deployment flagger -n istio-system
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Flagger controller is unavailable."
+                    }
+
+                    Write-Host "Checking Flagger-managed services..."
+                    & $kubectl get services canary-demo-flagger canary-demo-flagger-primary canary-demo-flagger-canary -n default
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "One or more required Flagger services are missing."
+                    }
+
+                    Write-Host "Deployment preflight passed. No resources were changed."
+                '''
+            }
+        }
+
     }
 
     post {
