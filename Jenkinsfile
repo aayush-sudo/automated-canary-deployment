@@ -249,13 +249,18 @@ pipeline {
                     $primaryVersion = ($primaryVersion -join "").Trim()
                     Write-Host "Primary version response: $primaryVersion"
 
-                    if (-not $primaryVersion.Contains('"version":"v3"')) {
+                    try {
+                        $versionObject = $primaryVersion | ConvertFrom-Json
+                    }
+                    catch {
+                        throw "Primary /version endpoint did not return valid JSON: $primaryVersion"
+                    }
+
+                    if ($versionObject.version -ne "v3") {
                         throw "Primary /version response does not confirm v3: $primaryVersion"
                     }
-                    if ($LASTEXITCODE -ne 0) { throw "Could not verify the primary application version." }
-                    $primaryVersion = ($primaryVersion -join "").Trim()
-                    Write-Host "Primary APP_VERSION: $primaryVersion"
-                    if ($primaryVersion -ne "v3") { throw "Primary APP_VERSION is '$primaryVersion', not v3." }
+
+                    Write-Host "Primary application version confirmed: $($versionObject.version)"
                 '''
             }
         }
