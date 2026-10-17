@@ -212,7 +212,7 @@ pipeline {
                     }
                     finally { Remove-Item $patchPath -Force -ErrorAction SilentlyContinue }
 
-                    $deadline = (Get-Date).AddMinutes(10)
+                    $deadline = (Get-Date).AddMinutes(25)
                     $promoted = $false
                     while ((Get-Date) -lt $deadline) {
                         $phase = & $env:KUBECTL get canary canary-demo-flagger -n default -o "jsonpath={.status.phase}"
