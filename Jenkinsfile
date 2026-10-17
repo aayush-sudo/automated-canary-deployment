@@ -226,7 +226,7 @@ pipeline {
                     $primaryVersion = ($primaryVersion -join "").Trim()
                     Write-Host "Primary version response: $primaryVersion"
 
-                    if ($primaryVersion -notmatch '"version"\s*:\s*"v3"') {
+                    if (-not $primaryVersion.Contains('"version":"v3"')) {
                         throw "Primary /version response does not confirm v3: $primaryVersion"
                     }
                     if ($LASTEXITCODE -ne 0) { throw "Could not verify the primary application version." }
