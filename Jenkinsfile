@@ -76,6 +76,29 @@ pipeline {
             }
         }
 
+        stage('Diagnose Kubernetes Access') {
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+
+                    Write-Host "Jenkins service identity:"
+                    whoami
+
+                    Write-Host "Checking kubeconfig:"
+                    Test-Path "C:\\Users\\hp\\.kube\\config"
+
+                    Write-Host "Checking Minikube API endpoint:"
+                    Test-NetConnection 127.0.0.1 -Port 51191
+
+                    Write-Host "Testing Kubernetes API access:"
+                    & $env:KUBECTL --request-timeout=10s get nodes
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Kubernetes API access failed under Jenkins."
+                    }
+                '''
+            }
+        }
+        
         stage('Deployment Preflight') {
             steps {
                 powershell '''
