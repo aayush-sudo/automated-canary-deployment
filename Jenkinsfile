@@ -60,9 +60,9 @@ pipeline {
                     Write-Host "`nKubernetes client:"
                     & $env:KUBECTL version --client
                     if ($LASTEXITCODE -ne 0) { throw "kubectl is unavailable." }
-                    Write-Host "`nMinikube profile:"
-                    & $env:MINIKUBE -p devops-canary status
-                    if ($LASTEXITCODE -ne 0) { throw "Minikube profile devops-canary is unavailable." }
+                    Write-Host "`nMinikube profile diagnostic:"
+                    & $env:MINIKUBE profile list
+                    Write-Host "Continuing to the explicit Kubernetes access diagnostic."
                     Write-Host "`nHelm:"
                     & $env:HELM version
                     if ($LASTEXITCODE -ne 0) { throw "Helm is unavailable." }
@@ -98,7 +98,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Deployment Preflight') {
             steps {
                 powershell '''
