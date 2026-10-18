@@ -20,11 +20,13 @@ pipeline {
     }
 
     environment {
+        DOCKER_BUILDKIT = '1'
         MINIKUBE_HOME = 'C:\\Users\\hp\\.minikube'
         KUBECONFIG = 'C:\\Users\\hp\\.kube\\config'
         KUBECTL = 'C:\\Windows\\System32\\kubectl\\kubectl.exe'
         MINIKUBE = 'C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe'
         DOCKER = 'C:\\Users\\hp\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe'
+        PATH+DOCKER = 'C:\\Users\\hp\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin'
         HELM = 'C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Links\\helm.exe'
     }
 
