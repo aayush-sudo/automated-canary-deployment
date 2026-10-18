@@ -9,7 +9,7 @@ pipeline {
         )
         choice(
             name: 'DEPLOY_MODE',
-            choices: ['VALIDATE_ONLY', 'ROLLOUT_V3'],
+            choices: ['VALIDATE_ONLY', 'IMAGE_BUILD_ONLY', 'ROLLOUT_V3'],
             description: 'Choose validation only or explicitly trigger the v3 canary rollout'
         )
     }
@@ -100,6 +100,7 @@ pipeline {
         }
 
         stage('Deployment Preflight') {
+            when { expression { params.DEPLOY_MODE != 'IMAGE_BUILD_ONLY' } }
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
@@ -117,7 +118,49 @@ pipeline {
             }
         }
 
+        stage('Build and Load Canary Image') {
+            when { expression { params.DEPLOY_MODE == 'IMAGE_BUILD_ONLY' } }
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    $image = "canary-demo:v3"
+                    $profile = "devops-canary"
+                    $requestedImage = "$env:CANARY_IMAGE".Trim()
+
+                    if ($requestedImage -ne $image) {
+                        throw "IMAGE_BUILD_ONLY requires CANARY_IMAGE to be exactly $image."
+                    }
+
+                    Write-Host "Checking active Kubernetes context before building or loading the image."
+                    $context = & $env:KUBECTL config current-context
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not read the active Kubernetes context."
+                    }
+                    $context = ($context -join "").Trim()
+                    Write-Host "Active Kubernetes context: $context"
+                    if ($context -ne $profile) {
+                        throw "Refusing image build and load because the active Kubernetes context is '$context', not '$profile'."
+                    }
+
+                    Write-Host "Building $image from app/Dockerfile."
+                    & $env:DOCKER build -f app/Dockerfile -t $image app
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not build $image."
+                    }
+
+                    Write-Host "Loading $image into Minikube profile $profile."
+                    & $env:MINIKUBE image load --profile $profile $image
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Could not load $image into Minikube profile $profile."
+                    }
+
+                    Write-Host "Image build and Minikube load passed."
+                '''
+            }
+        }
+
         stage('Validate Canary Image') {
+            when { expression { params.DEPLOY_MODE != 'IMAGE_BUILD_ONLY' } }
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
@@ -183,6 +226,75 @@ pipeline {
                         & $env:KUBECTL delete pod $checkPod -n default --ignore-not-found=true --wait=true
                         if ($LASTEXITCODE -ne 0) { throw "Could not clean up the image-check pod." }
                         Write-Host "v3 image validation passed."
+                    }
+                '''
+            }
+        }
+
+        stage('Validate Built Image') {
+            when { expression { params.DEPLOY_MODE == 'IMAGE_BUILD_ONLY' } }
+            steps {
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    $image = "canary-demo:v3"
+                    $profile = "devops-canary"
+                    $checkPod = "canary-image-only-check-$([Guid]::NewGuid().ToString('N').Substring(0, 20))"
+                    $failure = $null
+
+                    try {
+                        Write-Host "Checking active Kubernetes context."
+                        $context = & $env:KUBECTL config current-context
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not read the active Kubernetes context."
+                        }
+                        $context = ($context -join "").Trim()
+                        Write-Host "Active Kubernetes context: $context"
+                        if ($context -ne $profile) {
+                            throw "Refusing image validation because the active Kubernetes context is '$context', not '$profile'."
+                        }
+
+                        Write-Host "Creating isolated image-check pod $checkPod."
+                        & $env:KUBECTL run $checkPod `
+                            -n default `
+                            --image=$image `
+                            --restart=Never `
+                            --image-pull-policy=Never `
+                            --command -- python -c "print('canary-demo:v3 image available')"
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not create the image-check pod."
+                        }
+
+                        & $env:KUBECTL wait `
+                            --for=jsonpath='{.status.phase}'=Succeeded `
+                            "pod/$checkPod" `
+                            -n default `
+                            --timeout=90s
+                        if ($LASTEXITCODE -ne 0) {
+                            & $env:KUBECTL describe pod $checkPod -n default
+                            & $env:KUBECTL logs $checkPod -n default
+                            throw "The image-check pod did not reach Succeeded."
+                        }
+
+                        & $env:KUBECTL logs $checkPod -n default
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not read image-check output."
+                        }
+
+                        Write-Host "Built image execution validation passed."
+                    }
+                    catch {
+                        $failure = $_
+                    }
+                    finally {
+                        Write-Host "Cleaning up image-check pod $checkPod."
+                        & $env:KUBECTL delete pod $checkPod -n default --ignore-not-found=true --wait=true
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Warning "Could not clean up image-check pod $checkPod."
+                        }
+                    }
+
+                    if ($null -ne $failure) {
+                        throw $failure
                     }
                 '''
             }
