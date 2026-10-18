@@ -20,6 +20,7 @@ pipeline {
     }
 
     environment {
+        MINIKUBE_HOME = 'C:\\Users\\hp\\.minikube'
         KUBECONFIG = 'C:\\Users\\hp\\.kube\\config'
         KUBECTL = 'C:\\Windows\\System32\\kubectl\\kubectl.exe'
         MINIKUBE = 'C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe'
@@ -147,14 +148,18 @@ pipeline {
                     }
 
                     Write-Host "Building $image from app/Dockerfile."
-                    & $env:DOCKER build -f app/Dockerfile -t $image app
-                    if ($LASTEXITCODE -ne 0) {
+                    $dockerOutput = & $env:DOCKER build -f app/Dockerfile -t $image app 2>&1
+                    $dockerExitCode = $LASTEXITCODE
+                    $dockerOutput | ForEach-Object { Write-Host $_ }
+                    if ($dockerExitCode -ne 0) {
                         throw "Could not build $image."
                     }
 
                     Write-Host "Loading $image into Minikube profile $profile."
-                    & $env:MINIKUBE image load --profile $profile $image
-                    if ($LASTEXITCODE -ne 0) {
+                    $minikubeOutput = & $env:MINIKUBE image load --profile $profile $image 2>&1
+                    $minikubeExitCode = $LASTEXITCODE
+                    $minikubeOutput | ForEach-Object { Write-Host $_ }
+                    if ($minikubeExitCode -ne 0) {
                         throw "Could not load $image into Minikube profile $profile."
                     }
 
