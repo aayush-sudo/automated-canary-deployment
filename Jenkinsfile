@@ -148,7 +148,7 @@ pipeline {
                         throw "Refusing image build and load because the active Kubernetes context is '$context', not '$profile'."
                     }
 
-                    $env:PATH = "C:\Users\hp\AppData\Local\Programs\DockerDesktop\resources\bin;$env:PATH"
+                    $env:PATH = "C:/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin;$env:PATH"
                     Write-Host "Building $image from app/Dockerfile."
                     $dockerOutput = & $env:DOCKER build -f app/Dockerfile -t $image app 2>&1
                     $dockerExitCode = $LASTEXITCODE
