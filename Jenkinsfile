@@ -1,4 +1,4 @@
-pipeline {
+﻿pipeline {
     agent any
 
     parameters {
@@ -148,13 +148,46 @@ pipeline {
                     }
 
                     $env:PATH = "C:/Users/hp/AppData/Local/Programs/DockerDesktop/resources/bin;$env:PATH"
+
                     Write-Host "Building $image from app/Dockerfile."
-                    $dockerOutput = & $env:DOCKER build -f app/Dockerfile -t $image app 2>&1
-                    $dockerExitCode = $LASTEXITCODE
-                    $dockerOutput | ForEach-Object { Write-Host $_ }
-                    if ($dockerExitCode -ne 0) {
-                        throw "Could not build $image."
+
+                    $stdoutFile = Join-Path $env:TEMP "docker-build-$env:BUILD_NUMBER.out"
+                    $stderrFile = Join-Path $env:TEMP "docker-build-$env:BUILD_NUMBER.err"
+
+                    $dockerArgs = @(
+                        'build',
+                        '-f', 'app/Dockerfile',
+                        '-t', $image,
+                        'app'
+                    )
+
+                    $process = Start-Process `
+                        -FilePath $env:DOCKER `
+                        -ArgumentList $dockerArgs `
+                        -WorkingDirectory (Get-Location).Path `
+                        -Wait `
+                        -PassThru `
+                        -NoNewWindow `
+                        -RedirectStandardOutput $stdoutFile `
+                        -RedirectStandardError $stderrFile
+
+                    if (Test-Path $stdoutFile) {
+                        Get-Content $stdoutFile | ForEach-Object { Write-Host $_ }
                     }
+
+                    if (Test-Path $stderrFile) {
+                        Get-Content $stderrFile | ForEach-Object { Write-Host $_ }
+                    }
+
+                    $dockerExitCode = $process.ExitCode
+
+                    Remove-Item $stdoutFile, $stderrFile -Force -ErrorAction SilentlyContinue
+
+                    if ($dockerExitCode -ne 0) {
+                        throw "Could not build $image. Docker exit code: $dockerExitCode"
+                    }
+
+                    Write-Host "Docker image build completed successfully."
 
                     Write-Host "Loading $image into Minikube profile $profile."
                     $minikubeOutput = & $env:MINIKUBE image load --profile $profile $image 2>&1
