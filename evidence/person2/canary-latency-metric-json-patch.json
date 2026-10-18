@@ -1,0 +1,17 @@
+[
+  {
+    "op": "add",
+    "path": "/spec/analysis/metrics/-",
+    "value": {
+      "name": "latency-seen-by-caller",
+      "templateRef": {
+        "name": "latency-source",
+        "namespace": "default"
+      },
+      "thresholdRange": {
+        "max": 500
+      },
+      "interval": "2m"
+    }
+  }
+]

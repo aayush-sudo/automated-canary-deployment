@@ -1,0 +1,19 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: canary-request-delay
+  namespace: default
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: canary-demo-flagger-canary
+  delay:
+    latency: "800ms"
+    correlation: "100"
+    jitter: "0ms"
+  direction: to
+  duration: "5m"

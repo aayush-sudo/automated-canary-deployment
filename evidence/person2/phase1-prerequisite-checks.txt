@@ -1,0 +1,130 @@
+Phase 1: Chaos Mesh rollback prerequisite checks
+Date: 2026-10-18
+Mode: read-only; no manifests were applied or deleted
+
+Purpose
+- Record the PowerShell/kubectl/helm commands executed for Phase 1.
+- Preserve the healthy Build #29 baseline before any rollback experiment.
+
+Command 1: repository and context
+Reason: confirm the current branch, untracked files, and Kubernetes context.
+
+$env:KUBECONFIG = 'C:\Users\hp\.kube\config'
+$KUBECTL = 'C:\Windows\System32\kubectl\kubectl.exe'
+$HELM = 'C:\Users\hp\AppData\Local\Microsoft\WinGet\Links\helm.exe'
+git status --short --branch
+git branch --show-current
+git log -1 --oneline --decorate
+& $KUBECTL config current-context
+
+Result:
+- Branch: feature/person2-deployment
+- HEAD: fd68c24 (ci: build canary image before rollout)
+- Untracked: AGENT_PROGRESS.md, evidence/, and an oddly named file
+- Kubernetes context: devops-canary
+- PASS
+
+Command 2: Helm release and Chaos Mesh readiness
+Reason: verify existing installations without reinstalling them.
+
+& $HELM list -A
+& $KUBECTL get pods -n chaos-mesh -o wide
+& $KUBECTL get deployment flagger -n istio-system -o wide
+& $KUBECTL get crd networkchaos.chaos-mesh.org -o wide
+
+Result:
+- chaos-mesh: deployed, chart chaos-mesh-2.8.4, app 2.8.4
+- flagger: deployed, chart flagger-1.45.0, app 1.45.0
+- prometheus: deployed, chart prometheus-29.36.1, app v3.15.0
+- chaos-controller-manager: 1/1 Running
+- chaos-daemon: 1/1 Running
+- flagger deployment: 1/1 available
+- networkchaos.chaos-mesh.org exists
+- PASS
+
+Command 3: Chaos Mesh runtime and permissions
+Reason: verify containerd socket configuration and NetworkChaos permissions.
+
+& $KUBECTL get daemonset chaos-daemon -n chaos-mesh -o yaml
+& $KUBECTL get clusterrole chaos-mesh-chaos-controller-manager-cluster-level -o yaml
+& $KUBECTL get clusterrole chaos-mesh-chaos-controller-manager-target-namespace -o yaml
+& $KUBECTL api-resources | Select-String -Pattern 'networkchaos'
+
+Result:
+- chaos-daemon runtime: containerd
+- runtime socket: /host-run/containerd.sock
+- hostPath: /run/containerd mounted at /host-run
+- daemon: privileged with SYS_PTRACE
+- NetworkChaos API: chaos-mesh.org/v1alpha1, namespaced
+- target-namespace role has full verbs on chaos-mesh.org resources
+- PASS
+
+Command 4: Flagger Canary and MetricTemplate
+Reason: preserve and inspect the healthy baseline and current latency metric.
+
+& $KUBECTL get canary canary-demo-flagger -n default -o yaml
+& $KUBECTL get metrictemplate latency-source -n default -o yaml
+
+Result:
+- Canary phase: Succeeded
+- canaryWeight: 0
+- failedChecks: 0
+- lastPromotedSpec: c7f6cff87
+- Current Canary has request-success-rate and request-duration only
+- MetricTemplate latency-source exists
+- MetricTemplate provider: http://prometheus-server.istio-system:80
+- PASS for healthy baseline
+- BLOCKED for custom metric attachment: latency-source is not attached to the live Canary
+
+Command 5: Prometheus query
+Reason: verify the actual service path and confirm a numeric latency result.
+
+$query = 'histogram_quantile(0.99,sum(rate(istio_request_duration_milliseconds_bucket{reporter="source",destination_workload_namespace="default",destination_workload=~"canary-demo-flagger.*"}[2m])) by (le))'
+$encoded = [System.Uri]::EscapeDataString($query)
+$path = "/api/v1/namespaces/istio-system/services/http:prometheus-server:80/proxy/api/v1/query?query=$encoded"
+& $KUBECTL get --raw $path
+
+Result:
+- Prometheus status: success
+- resultType: vector
+- numeric value: 16.300000000000047
+- PASS for query data and units in milliseconds
+
+Command 6: workloads, labels, primary version, and load generator
+Reason: verify application readiness, image/version, selectors, and traffic-generator presence.
+
+& $KUBECTL get deployments,pods,svc -n default -o wide
+$version = & $KUBECTL exec deployment/canary-demo-flagger-primary -n default -- python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:5001/version', timeout=5).read().decode())"
+& $KUBECTL logs pod/canary-load-generator -n default --since=5m --tail=80
+& $KUBECTL get pods -n default -o custom-columns='NAME:.metadata.name,STATUS:.status.phase,APP:.metadata.labels.app,VERSION:.metadata.labels.version,IMAGE:.spec.containers[0].image'
+
+Result:
+- Primary deployment: 1/1 ready
+- Primary image: canary-demo:v3
+- Primary /version: {"application":"canary-demo","version":"v3"}
+- canary-load-generator: Running, 2/2 ready
+- Load-generator recent logs: empty; active traffic is not proven from logs
+- Primary pod label version: v2 while image/version is v3
+- PASS for application readiness/version
+- BLOCKED for proving active request generation from logs
+- REVIEW REQUIRED for Chaos Mesh selector assumptions
+
+Command 7: Flagger-generated routing
+Reason: verify current traffic ownership and weights without applying static Istio manifests.
+
+& $KUBECTL get virtualservice,destinationrule -n default -o yaml
+
+Result:
+- Flagger-owned VirtualService: canary-demo-flagger
+- Primary weight: 100
+- Canary weight: 0
+- Flagger-owned DestinationRules exist for primary and canary services
+- Static canary-demo VirtualService remains separate at 80/20 v1/v2
+- PASS; do not reapply the static 80/20 VirtualService
+
+Phase 1 conclusion
+- PASS: context, Helm releases, Chaos Mesh controller/daemon, CRD, containerd socket, RBAC, Flagger, Prometheus service/query, baseline Canary, primary readiness/version, and Flagger routing.
+- BLOCKED: custom latency metric is not attached to the live Canary.
+- BLOCKED: load-generator traffic is not proven by the captured recent logs.
+- REVIEW REQUIRED: primary pod label version=v2 despite v3 image/version; use the actual app=canary-demo-flagger selector and verify live canary targeting before chaos.
+- No live resources were changed.

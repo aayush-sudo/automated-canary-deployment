@@ -1,0 +1,19 @@
+﻿{"level":"info","ts":"2026-10-18T08:46:58.052Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:46:58.055Z","caller":"controller/events.go:33","msg":"New revision detected! Scaling up canary-demo-flagger.default","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:48:58.054Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:48:58.067Z","caller":"controller/events.go:33","msg":"Starting canary analysis for canary-demo-flagger.default","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:48:58.111Z","caller":"controller/events.go:33","msg":"Advance canary-demo-flagger.default canary weight 10","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:50:58.027Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:50:58.129Z","caller":"controller/events.go:33","msg":"Advance canary-demo-flagger.default canary weight 20","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:52:58.032Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:52:58.082Z","caller":"controller/events.go:33","msg":"Advance canary-demo-flagger.default canary weight 30","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:54:57.986Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:54:58.023Z","caller":"controller/events.go:33","msg":"Advance canary-demo-flagger.default canary weight 40","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:56:58.002Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:56:58.064Z","caller":"controller/events.go:33","msg":"Advance canary-demo-flagger.default canary weight 50","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T08:58:57.984Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T08:58:57.998Z","caller":"controller/events.go:33","msg":"Copying canary-demo-flagger.default template spec to canary-demo-flagger-primary.default","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T09:00:58.327Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T09:00:58.330Z","caller":"controller/events.go:33","msg":"Routing all traffic to primary","canary":"canary-demo-flagger.default"}
+{"level":"info","ts":"2026-10-18T09:02:57.975Z","caller":"router/istio.go:419","msg":"Canary canary-demo-flagger.default uses HTTP service"}
+{"level":"info","ts":"2026-10-18T09:02:58.007Z","caller":"controller/events.go:33","msg":"Promotion completed! Scaling down canary-demo-flagger.default","canary":"canary-demo-flagger.default"}

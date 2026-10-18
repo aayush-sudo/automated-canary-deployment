@@ -1,0 +1,85 @@
+Phase 2: latency MetricTemplate and Canary configuration validation
+Date: 2026-10-18
+Mode: read-only; no live resource was changed
+
+Purpose
+- Verify the live MetricTemplate and Prometheus service.
+- Validate the PromQL result and units.
+- Confirm the custom metric is not yet attached to the live Canary.
+- Preserve the healthy Build #29 baseline.
+
+Command 1: inspect live MetricTemplate and Prometheus Service
+Reason: verify the provider address is the actual in-cluster Prometheus endpoint.
+
+$env:KUBECONFIG = 'C:\Users\hp\.kube\config'
+$KUBECTL = 'C:\Windows\System32\kubectl\kubectl.exe'
+& $KUBECTL get metrictemplate latency-source -n default -o yaml
+& $KUBECTL get svc prometheus-server -n istio-system -o yaml
+
+Result:
+- MetricTemplate latency-source exists in default.
+- Provider type: prometheus.
+- Provider address: http://prometheus-server.istio-system:80.
+- Prometheus Service exists in istio-system.
+- Service port: 80/TCP; targetPort: 9090.
+- PASS.
+
+Command 2: validate Prometheus query for baseline and primary
+Reason: confirm the query returns numeric data and establish the unit before comparing it with max: 500.
+
+$queries = @{
+  baseline = 'histogram_quantile(0.99,sum(rate(istio_request_duration_milliseconds_bucket{reporter="source",destination_workload_namespace="default",destination_workload=~"canary-demo-flagger.*"}[2m])) by (le))'
+  primary = 'histogram_quantile(0.99,sum(rate(istio_request_duration_milliseconds_bucket{reporter="source",destination_workload_namespace="default",destination_workload="canary-demo-flagger-primary"}[2m])) by (le))'
+  canary = 'histogram_quantile(0.99,sum(rate(istio_request_duration_milliseconds_bucket{reporter="source",destination_workload_namespace="default",destination_workload="canary-demo-flagger-canary"}[2m])) by (le))'
+}
+foreach ($name in $queries.Keys) {
+  $encoded = [System.Uri]::EscapeDataString($queries[$name])
+  $path = "/api/v1/namespaces/istio-system/services/http:prometheus-server:80/proxy/api/v1/query?query=$encoded"
+  & $KUBECTL get --raw $path
+}
+
+Result:
+- Baseline result: 9.776923076923078.
+- Primary result: 9.776923076923078.
+- Canary result: empty vector because no canary workload is currently receiving traffic.
+- Prometheus response status: success.
+- Result type: vector.
+- Unit: milliseconds, based on istio_request_duration_milliseconds_bucket.
+- The proposed max: 500 threshold is therefore 500 milliseconds.
+- PASS for query/provider/unit validation.
+- BLOCKED for canary-specific live data until a candidate receives traffic.
+
+Command 3: inspect live Canary metric attachment
+Reason: verify which analysis metrics Flagger currently uses.
+
+& $KUBECTL get canary canary-demo-flagger -n default -o yaml
+& $KUBECTL get canary canary-demo-flagger -n default -o jsonpath="{range .spec.analysis.metrics[*]}{.name}|{.interval}|{.thresholdRange.min}|{.thresholdRange.max}|{.templateRef.name}{'\n'}{end}"
+
+Result:
+- Existing metrics:
+  request-success-rate | 2m | minimum 99
+  request-duration | 2m | maximum 500
+- latency-seen-by-caller is not attached.
+- Live Canary remains phase Succeeded, canaryWeight 0, failedChecks 0.
+- PASS for baseline preservation.
+- BLOCKED for custom metric activation pending approval.
+
+Proposed minimal diff (not applied)
+
+File: k8s/flagger-canary.yaml
+
+@@
+       - name: request-duration
+         thresholdRange:
+           max: 500
+         interval: 2m
++      - name: latency-seen-by-caller
++        templateRef:
++          name: latency-source
++          namespace: default
++        thresholdRange:
++          max: 500
++        interval: 2m
+
+No existing metric, target reference, service, threshold, weight, or analysis
+setting is changed. The live Canary must not be modified until explicit approval.

@@ -1,0 +1,128 @@
+Phase 3: NetworkChaos review and proposed experiment
+Date: 2026-10-18
+Mode: read-only; proposed manifest was not applied
+
+Objective
+- Verify the live workload labels and Flagger-owned routing before preparing
+  a controlled NetworkChaos experiment.
+- Review Person 3's remote-only experiment manifests without merging or
+  applying them.
+- Prepare a bounded candidate-targeted delay manifest.
+
+Command 1: context and workload labels
+Reason: ensure the review uses the intended Minikube profile and identify the
+actual labels used by Flagger-generated primary and candidate workloads.
+
+$env:KUBECONFIG = 'C:\Users\hp\.kube\config'
+$KUBECTL = 'C:\Windows\System32\kubectl\kubectl.exe'
+& $KUBECTL config current-context
+& $KUBECTL get pods -n default -l app=canary-demo-flagger --show-labels -o wide
+& $KUBECTL get deploy -n default -o wide --show-labels
+& $KUBECTL get pods -n default -l 'app in (canary-demo-flagger-primary,canary-demo-flagger-canary)' --show-labels -o wide
+
+Result:
+- Context: devops-canary.
+- The target deployment canary-demo-flagger is scaled to 0 replicas.
+- The promoted primary deployment canary-demo-flagger-primary is 1/1 ready.
+- The primary pod label is app=canary-demo-flagger-primary.
+- No canary deployment or canary pod currently exists.
+- The selector app=canary-demo-flagger matches no current pod.
+- PASS for context and label discovery.
+- BLOCKED for final selector verification until a candidate rollout creates
+  canary-demo-flagger-canary.
+
+Command 2: Flagger-generated routing
+Reason: verify that Flagger owns the active route and preserve the healthy
+100/0 baseline.
+
+& $KUBECTL get virtualservice canary-demo-flagger -n default -o yaml
+& $KUBECTL get svc -n default
+
+Result:
+- Flagger-owned VirtualService canary-demo-flagger exists.
+- Primary route weight: 100.
+- Canary route weight: 0.
+- Flagger services include canary-demo-flagger-primary and
+  canary-demo-flagger-canary.
+- The candidate service exists even though its deployment is currently absent.
+- Do not reapply the static repository VirtualService.
+- PASS for routing ownership and healthy baseline.
+
+Command 3: Chaos Mesh API and current resources
+Reason: verify that the installed CRD accepts the proposed fields and that no
+fault injection is already active.
+
+& $KUBECTL explain networkchaos.spec --api-version=chaos-mesh.org/v1alpha1
+& $KUBECTL explain networkchaos.spec.selector --api-version=chaos-mesh.org/v1alpha1
+& $KUBECTL explain networkchaos.spec.direction --api-version=chaos-mesh.org/v1alpha1
+& $KUBECTL explain networkchaos.spec.delay --api-version=chaos-mesh.org/v1alpha1
+& $KUBECTL get networkchaos -A -o wide
+
+Result:
+- NetworkChaos API: chaos-mesh.org/v1alpha1.
+- Supported direction values include to, from, and both.
+- Delay latency is required.
+- Label selectors, namespaces, mode all, correlation, jitter, and duration
+  are supported.
+- No NetworkChaos resources are currently active.
+- PASS for API compatibility and clean starting state.
+
+Command 4: inspect Person 3 remote manifests without switching branches
+Reason: compare prior work without merging or changing the checkout.
+
+git show origin/feature/person3-chaos:experiments/canary-delay.yaml
+git show origin/feature/person3-chaos:experiments/flagger-canary-chaos.yaml
+git show origin/feature/person3-chaos:experiments/latency-metric.yaml
+
+Result:
+- canary-delay.yaml selects app=canary-demo-flagger, which matches no current
+  pod and does not identify the future Flagger canary deployment.
+- It uses 800ms delay, 100 correlation, 0ms jitter, direction to, mode all,
+  and duration 10m.
+- flagger-canary-chaos.yaml is an alternate full Canary definition and must not
+  be applied wholesale. The custom latency metric is already attached to the
+  live Canary from Phase 2.
+- latency-metric.yaml points to prometheus.istio-system:9090, which is not
+  the verified live Service address. The live MetricTemplate remains the
+  corrected source at prometheus-server.istio-system:80.
+
+Proposed manifest
+- File: evidence/person2/phase3-networkchaos-proposed.yaml
+- Target label: app=canary-demo-flagger-canary.
+- Namespace: default.
+- Action: delay.
+- Latency: 800ms.
+- Correlation: 100.
+- Jitter: 0ms.
+- Direction: to.
+- Mode: all.
+- Duration: 5m.
+- This is a proposal only and was not applied.
+
+Why this remains conditional
+- Flagger currently has no canary pod, so the selector cannot yet be
+  verified against a live candidate.
+- Before any future application, create a candidate through the existing
+  Flagger workflow, verify a Running pod with app=canary-demo-flagger-canary,
+  verify it receives traffic, and confirm the healthy baseline.
+- Obtain separate approval before applying this manifest.
+- After the demonstration, delete the named NetworkChaos resource and verify
+  that no NetworkChaos remains active.
+
+Command 5: client-side manifest validation
+Reason: verify YAML and CRD shape without creating a live resource.
+
+& $KUBECTL apply --dry-run=client --validate=strict `
+  -f evidence/person2/phase3-networkchaos-proposed.yaml
+
+Result:
+- networkchaos.chaos-mesh.org/canary-request-delay created (dry run).
+- Client-side validation passed.
+- No NetworkChaos resource was created.
+
+Final Phase 3 state:
+- Canary phase: Succeeded.
+- Canary weight: 0.
+- Failed checks: 0.
+- Active NetworkChaos resources: none.
+- No experiment was applied.

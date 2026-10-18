@@ -1,0 +1,32 @@
+﻿apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  annotations:
+    helm.toolkit.fluxcd.io/driftDetection: disabled
+    kustomize.toolkit.fluxcd.io/reconcile: disabled
+  creationTimestamp: "2026-10-17T21:52:12Z"
+  generation: 9
+  name: canary-demo-flagger
+  namespace: default
+  ownerReferences:
+  - apiVersion: flagger.app/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Canary
+    name: canary-demo-flagger
+    uid: 2f08c91f-b1d6-4ec8-aba1-aceb914482a3
+  resourceVersion: "171153"
+  uid: a5da0a9d-3de3-4bd9-9ed4-0ad45e92ba3f
+spec:
+  gateways:
+  - mesh
+  hosts:
+  - canary-demo-flagger
+  http:
+  - route:
+    - destination:
+        host: canary-demo-flagger-primary
+      weight: 100
+    - destination:
+        host: canary-demo-flagger-canary
+      weight: 0

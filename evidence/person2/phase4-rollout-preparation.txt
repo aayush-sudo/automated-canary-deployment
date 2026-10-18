@@ -1,0 +1,128 @@
+Phase 4: candidate rollout preparation
+Date: 2026-10-18
+Mode: read-only preparation; Jenkins was not triggered
+
+Objective
+- Identify the supported way to create a Flagger candidate.
+- Confirm the healthy baseline before requesting approval.
+- Avoid direct deployment edits, static Istio changes, and NetworkChaos.
+
+Inspected Jenkinsfile behavior
+- DEPLOY_MODE choices include VALIDATE_ONLY, IMAGE_BUILD_ONLY, and ROLLOUT_V3.
+- The supported candidate trigger is DEPLOY_MODE=ROLLOUT_V3.
+- ROLLOUT_V3 requires CANARY_IMAGE=canary-demo:v3 exactly.
+- The pipeline builds and loads canary-demo:v3 into Minikube profile
+  devops-canary before validation and rollout.
+- The pipeline verifies the active Kubernetes context is devops-canary.
+- The rollout stage reads the current Flagger lastPromotedSpec.
+- It patches only the Flagger target Deployment template with:
+  image: canary-demo:v3
+  APP_VERSION: v3
+  a unique rollout-trigger annotation based on the Jenkins build number.
+- Flagger, not Jenkins, creates/manages the candidate deployment and traffic
+  shifting.
+- The pipeline waits for a new Flagger promotion and verifies the promoted
+  primary /version response is v3.
+- No direct static Istio VirtualService apply is performed.
+- No Chaos Mesh resource is created by the Jenkinsfile.
+
+Verified baseline commands and results
+$env:KUBECONFIG = 'C:\Users\hp\.kube\config'
+$KUBECTL = 'C:\Windows\System32\kubectl\kubectl.exe'
+& $KUBECTL config current-context
+& $KUBECTL get deploy canary-demo-flagger-primary -n default `
+  -o jsonpath="ready={.status.readyReplicas}/{.status.replicas};available={.status.availableReplicas};image={.spec.template.spec.containers[0].image}{'\n'}"
+& $KUBECTL get canary canary-demo-flagger -n default `
+  -o jsonpath="phase={.status.phase};weight={.status.canaryWeight};failedChecks={.status.failedChecks};target={.spec.targetRef.name}{'\n'}"
+& $KUBECTL get virtualservice canary-demo-flagger -n default `
+  -o jsonpath="{range .spec.http[*].route[*]}{.destination.host}={.weight}{'\n'}{end}"
+
+Result:
+- Context: devops-canary.
+- Primary: ready 1/1, available 1, image canary-demo:v3.
+- Canary: phase Succeeded, weight 0, failedChecks 0, target
+  canary-demo-flagger.
+- Flagger routing: primary 100, canary 0.
+- PASS.
+
+Proposed Jenkins trigger
+Use the existing Jenkins job's Build with Parameters action:
+
+CANARY_IMAGE=canary-demo:v3
+DEPLOY_MODE=ROLLOUT_V3
+
+If the Jenkins endpoint and credentials are already configured, the
+equivalent parameterized HTTP trigger is:
+
+curl.exe -X POST "<JENKINS_URL>/job/<JOB_NAME>/buildWithParameters" `
+  --data-urlencode "CANARY_IMAGE=canary-demo:v3" `
+  --data-urlencode "DEPLOY_MODE=ROLLOUT_V3"
+
+The URL and authentication must be supplied by the Jenkins environment; they
+were not inferred or executed here.
+
+Expected changes after approval
+- Jenkins builds and loads canary-demo:v3 into devops-canary.
+- Jenkins patches the Flagger target template to create a new candidate
+  revision.
+- Flagger creates canary-demo-flagger-canary and temporarily shifts traffic.
+- The existing healthy primary is retained while analysis runs.
+- Flagger owns the generated VirtualService weights.
+- This does not apply NetworkChaos.
+
+Important timing constraint
+- The Jenkins rollout stage waits for promotion and may finish after the
+  candidate has been promoted and removed.
+- Candidate label, readiness, routing, and latency must therefore be checked
+  while the Jenkins rollout is in progress, before it completes.
+- If the candidate cannot be observed during the rollout, stop and diagnose
+  before applying any chaos.
+
+Required post-trigger checks before any chaos approval
+& $KUBECTL get pods -n default -l app=canary-demo-flagger-canary --show-labels -o wide
+& $KUBECTL get deploy canary-demo-flagger-canary -n default
+& $KUBECTL get virtualservice canary-demo-flagger -n default -o yaml
+& $KUBECTL get canary canary-demo-flagger -n default -o yaml
+# Query the verified latency-source PromQL through prometheus-server:80.
+
+No Jenkins build, NetworkChaos apply, direct deployment patch, commit, push,
+merge, or unrelated file modification was performed during this preparation.
+
+Approval and execution status
+- User approved the ROLLOUT_V3 trigger.
+- No Jenkins endpoint, job name, credentials, or local Jenkins service was
+  available in the workspace or environment.
+- http://localhost:8080 and http://127.0.0.1:8080 were unavailable.
+- No Jenkins request was invented or sent.
+- Healthy baseline remained unchanged: primary 1/1 v3, Canary Succeeded with
+  weight 0 and failedChecks 0, and no active NetworkChaos.
+
+Build #30 inspection
+- User supplied Build #30:
+  http://localhost:8080/job/automated-canary-deployment/30/
+- User supplied parameters:
+  CANARY_IMAGE=canary-demo:v3
+  DEPLOY_MODE=ROLLOUT_V3
+- Jenkins checked out fd68c246128657a930f9422391bbaf760acf3b3b.
+- Context check passed: devops-canary.
+- Deployment preflight passed.
+- Build and Load Canary Image failed during the Docker build.
+- Console output reported the Docker legacy builder deprecation as a
+  PowerShell NativeCommandError and the pipeline ended with:
+  ERROR: script returned exit code 1
+  Finished: FAILURE
+- Validate Built Image and Trigger Flagger Canary Rollout were skipped due to
+  the earlier failure.
+- No candidate rollout was started by Build #30.
+
+Post-Build #30 live verification
+- Context: devops-canary.
+- Primary pod: 2/2 Running; deployment ready 1/1; image canary-demo:v3.
+- No canary pod or canary deployment exists.
+- Canary status: Succeeded, canaryWeight 0, failedChecks 0.
+- Flagger VirtualService: primary 100, canary 0.
+- Aggregate latency query returned 35.50000000000008 milliseconds.
+- Candidate-specific latency query returned an empty vector because no
+  candidate workload exists.
+- Active NetworkChaos resources: none.
+- No second build was triggered and no NetworkChaos resource was applied.

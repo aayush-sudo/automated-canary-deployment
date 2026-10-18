@@ -1,0 +1,44 @@
+﻿apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"flagger.app/v1beta1","kind":"Canary","metadata":{"annotations":{},"name":"canary-demo-flagger","namespace":"default"},"spec":{"analysis":{"interval":"2m","maxWeight":50,"metrics":[{"interval":"2m","name":"request-success-rate","thresholdRange":{"min":99}},{"interval":"2m","name":"request-duration","thresholdRange":{"max":500}}],"stepWeight":10,"threshold":3},"progressDeadlineSeconds":300,"provider":"istio","service":{"port":5001,"targetPort":5001},"targetRef":{"apiVersion":"apps/v1","kind":"Deployment","name":"canary-demo-flagger"}}}
+  creationTimestamp: "2026-10-17T21:50:06Z"
+  generation: 2
+  name: canary-demo-flagger
+  namespace: default
+  resourceVersion: "171340"
+  uid: 2f08c91f-b1d6-4ec8-aba1-aceb914482a3
+spec:
+  analysis:
+    interval: 2m
+    maxWeight: 50
+    metrics: []
+    stepWeight: 10
+    threshold: 3
+  progressDeadlineSeconds: 300
+  provider: istio
+  service:
+    port: 5001
+    targetPort: 5001
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: canary-demo-flagger
+status:
+  canaryWeight: 0
+  conditions:
+  - lastTransitionTime: "2026-10-18T08:22:58Z"
+    lastUpdateTime: "2026-10-18T08:22:58Z"
+    message: Canary analysis completed successfully, promotion finished.
+    reason: Succeeded
+    status: "True"
+    type: Promoted
+  failedChecks: 0
+  iterations: 0
+  lastAppliedSpec: 5b9c88bb7
+  lastPromotedSpec: 5b9c88bb7
+  lastTransitionTime: "2026-10-18T08:22:58Z"
+  phase: Succeeded
+  trackedConfigs: {}

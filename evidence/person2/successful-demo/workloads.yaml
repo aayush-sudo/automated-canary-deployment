@@ -1,0 +1,11 @@
+﻿NAME                                          READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS    IMAGES           SELECTOR
+deployment.apps/canary-demo-flagger           0/0     0            0           5d20h   canary-demo   canary-demo:v2   app=canary-demo-flagger
+deployment.apps/canary-demo-flagger-primary   1/1     1            1           10h     canary-demo   canary-demo:v2   app=canary-demo-flagger-primary
+deployment.apps/canary-demo-v1                1/1     1            1           5d22h   canary-demo   canary-demo:v1   app=canary-demo,version=v1
+deployment.apps/canary-demo-v2                1/1     1            1           5d22h   canary-demo   canary-demo:v2   app=canary-demo,version=v2
+
+NAME                                               READY   STATUS    RESTARTS      AGE     IP            NODE            NOMINATED NODE   READINESS GATES
+pod/canary-demo-flagger-primary-7b7fd68b97-pskgf   2/2     Running   0             16m     10.244.0.18   devops-canary   <none>           <none>
+pod/canary-demo-v1-6c47fb545f-z847v                2/2     Running   6 (97m ago)   5d21h   10.244.0.14   devops-canary   <none>           <none>
+pod/canary-demo-v2-58f999bd7b-87bng                2/2     Running   6 (97m ago)   5d21h   10.244.0.12   devops-canary   <none>           <none>
+pod/canary-load-generator                          2/2     Running   0             51m     10.244.0.16   devops-canary   <none>           <none>
