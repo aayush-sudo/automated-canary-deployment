@@ -119,7 +119,11 @@ pipeline {
         }
 
         stage('Build and Load Canary Image') {
-            when { expression { params.DEPLOY_MODE == 'IMAGE_BUILD_ONLY' } }
+            when {
+                expression {
+                    params.DEPLOY_MODE in ['IMAGE_BUILD_ONLY', 'ROLLOUT_V3']
+                }
+            }
             steps {
                 powershell '''
                     $ErrorActionPreference = "Stop"
