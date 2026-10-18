@@ -24,7 +24,6 @@ pipeline {
         KUBECONFIG = 'C:\\Users\\hp\\.kube\\config'
         KUBECTL = 'C:\\Windows\\System32\\kubectl\\kubectl.exe'
         MINIKUBE = 'C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe'
-        DOCKER_BUILDKIT = '1'
         DOCKER = 'C:\\Users\\hp\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe'
         HELM = 'C:\\Users\\hp\\AppData\\Local\\Microsoft\\WinGet\\Links\\helm.exe'
     }
